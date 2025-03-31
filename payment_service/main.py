@@ -1,6 +1,7 @@
 # Оновлений код для payment_service, виправлення імпортів та інтеграція з auth_service
 
-from fastapi import FastAPI, HTTPException, Depends, requests
+from fastapi import FastAPI, HTTPException, Depends
+import requests
 from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, Boolean
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from pydantic import BaseModel
@@ -19,8 +20,6 @@ SECRET_KEY = "secret"
 ADMIN_SECRET = "my_admin_secret"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-#Base = declarative_base()
-#Base.metadata.create_all(bind=engine)
 AUTH_SERVICE_URL = "http://auth_service:8000"
 
 def get_db():
@@ -32,19 +31,38 @@ def get_db():
 
 
 def get_current_client(token: str, db: Session = Depends(get_db)):
+    # Перевірка токена через auth_service
     response = requests.get(f"{AUTH_SERVICE_URL}/verify", headers={"Authorization": f"Bearer {token}"})
+
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail=response.json())
+
     user_data = response.json()
+
+    # Отримання детальної інформації про клієнта
+    client_response = requests.get(f"{AUTH_SERVICE_URL}/clients/me", headers={"Authorization": f"Bearer {token}"})
+
+    if client_response.status_code != 200:
+        raise HTTPException(status_code=client_response.status_code, detail=client_response.json())
+
+    client_data = client_response.json()
+
+    # Перевіряємо, чи клієнт є в локальній БД account.db
     client = db.query(Client).filter(Client.username == user_data["username"]).first()
+
     if not client:
-        raise HTTPException(status_code=404, detail="Client not found")
+        # Якщо клієнта немає, створюємо його в локальній БД
+        client = Client(username=client_data["username"], hashed_password=client_data["hashed_password"])
+        db.add(client)
+        db.commit()
+        db.refresh(client)
+
     return client
 
 @app.get("/payments/")
 def get_payments(client: Client = Depends(get_current_client), db: Session = Depends(get_db)):
-    if isinstance(client, Admin):  # Перевірка, чи це адмін
-        return db.query(Payment).all()  # Має бути Payment, а не CreditCard
+    if isinstance(client, Admin):
+        return db.query(Payment).all()
     return db.query(Payment).join(Account).filter(Account.owner_id == client.id).all()
 
 @app.post("/payments/")

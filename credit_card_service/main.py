@@ -24,13 +24,32 @@ def get_db():
         db.close()
 
 def get_current_client(token: str, db: Session = Depends(get_db)):
+    # Перевірка токена через auth_service
     response = requests.get(f"{AUTH_SERVICE_URL}/verify", headers={"Authorization": f"Bearer {token}"})
+
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail=response.json())
+
     user_data = response.json()
+
+    # Отримання детальної інформації про клієнта
+    client_response = requests.get(f"{AUTH_SERVICE_URL}/clients/me", headers={"Authorization": f"Bearer {token}"})
+
+    if client_response.status_code != 200:
+        raise HTTPException(status_code=client_response.status_code, detail=client_response.json())
+
+    client_data = client_response.json()
+
+    # Перевіряємо, чи клієнт є в локальній БД account.db
     client = db.query(Client).filter(Client.username == user_data["username"]).first()
+
     if not client:
-        raise HTTPException(status_code=404, detail="Client not found")
+        # Якщо клієнта немає, створюємо його в локальній БД
+        client = Client(username=client_data["username"], hashed_password=client_data["hashed_password"])
+        db.add(client)
+        db.commit()
+        db.refresh(client)
+
     return client
 
 @app.post("/credit-cards/create")
