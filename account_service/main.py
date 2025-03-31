@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, requests
 from fastapi.params import Security
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey
@@ -8,19 +8,19 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.security import HTTPBearer
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from models import Account, Client, Admin
-from users_service.main import get_current_client
+from models import Account, Client, Base
+# from users_service.main import get_current_client
 
 # from auth import get_current_client
 
 app = FastAPI()
 # Налаштування бази даних
-SQLALCHEMY_DATABASE_URL = "sqlite:///./payments.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./account.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-Base.metadata.create_all(bind=engine)
-
+#Base = declarative_base()
+#Base.metadata.create_all(bind=engine)
+AUTH_SERVICE_URL = "http://auth_service:8000"
 
 def get_db():
     db = SessionLocal()
@@ -28,6 +28,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def get_current_client(token: str, db: Session = Depends(get_db)):
+    response = requests.get(f"{AUTH_SERVICE_URL}/verify", headers={"Authorization": f"Bearer {token}"})
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=response.json())
+    user_data = response.json()
+    client = db.query(Client).filter(Client.username == user_data["username"]).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return client
 
 
 @app.post("/accounts/", response_model=dict)

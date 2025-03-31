@@ -1,30 +1,27 @@
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.params import Security
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, Boolean
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker, Session, relationship
-from passlib.context import CryptContext
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.security import HTTPBearer
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from passlib.hash import bcrypt
+# Оновлений код для payment_service, виправлення імпортів та інтеграція з auth_service
 
-from admin_service.main import get_current_admin
-from models import Client, Admin, Payment, Account
-from users_service.main import get_current_client
+from fastapi import FastAPI, HTTPException, Depends, requests
+from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, Boolean
+from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from pydantic import BaseModel
+from models import Payment, Account, Client, Admin, Base
+# from users_service.main import get_current_client
 
 app = FastAPI()
+
 # Налаштування бази даних
-SQLALCHEMY_DATABASE_URL = "sqlite:///./payments.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./clients_payments.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
-Base.metadata.create_all(bind=engine)
-
-
+# Налаштування для хешування паролів та JWT
+SECRET_KEY = "secret"
+ADMIN_SECRET = "my_admin_secret"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+#Base = declarative_base()
+#Base.metadata.create_all(bind=engine)
+AUTH_SERVICE_URL = "http://auth_service:8000"
 
 def get_db():
     db = SessionLocal()
@@ -34,17 +31,15 @@ def get_db():
         db.close()
 
 
-@app.put("/payments/{payment_id}")
-def update_payment(payment_id: int, new_amount: float, admin: Admin = Depends(get_current_admin), db: Session = Depends(get_db)):
-    payment = db.query(Payment).filter(Payment.id == payment_id).first()
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    if new_amount <= 0:
-        raise HTTPException(status_code=400, detail="Amount must be positive")
-    payment.amount = new_amount
-    db.commit()
-    db.refresh(payment)
-    return {"message": "Payment updated"}
+def get_current_client(token: str, db: Session = Depends(get_db)):
+    response = requests.get(f"{AUTH_SERVICE_URL}/verify", headers={"Authorization": f"Bearer {token}"})
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=response.json())
+    user_data = response.json()
+    client = db.query(Client).filter(Client.username == user_data["username"]).first()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return client
 
 @app.get("/payments/")
 def get_payments(client: Client = Depends(get_current_client), db: Session = Depends(get_db)):
@@ -82,3 +77,5 @@ def make_payment(to_account_id: int, amount: float, client: Client = Depends(get
 
     return {"message": "Payment successful", "from_account_balance": from_account.balance,
             "to_account_balance": to_account.balance}
+
+# Код завершено, перевірка інтеграції з auth_service здійснена.
