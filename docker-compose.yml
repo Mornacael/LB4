@@ -1,0 +1,74 @@
+services:
+  auth_service:
+    build:
+      context: ./auth_service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./auth_service:/app
+      - ./models.py:/app/models.py
+    networks:
+      - app-network
+
+  admin_service:
+    build:
+      context: ./admin_service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./admin_service:/app
+      - ./models.py:/app/models.py
+    networks:
+      - app-network
+    depends_on:
+      - auth_service
+
+  account_service:
+    build:
+      context: ./account_service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./account_service:/app
+      - ./models.py:/app/models.py
+    networks:
+      - app-network
+    depends_on:
+      - auth_service
+
+  credit_card_service:
+    build:
+      context: ./credit_card_service
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./credit_card_service:/app
+      - ./models.py:/app/models.py
+    networks:
+      - app-network
+    depends_on:
+      - auth_service
+      - account_service
+
+  payment_service:
+    build:
+      context: ./payment_service
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8005"
+    volumes:
+      - ./payment_service:/app
+      - ./models.py:/app/models.py
+    networks:
+      - app-network
+    depends_on:
+      - auth_service
+      - account_service
+
+networks:
+  app-network:
+    driver: bridge
