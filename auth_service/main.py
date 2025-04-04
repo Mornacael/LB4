@@ -102,3 +102,8 @@ def update_client(client_id: int, username: str, password: str, client: Client =
     db.commit()
     db.refresh(client)
     return {"message": "Client updated"}
+
+@app.get("/clients")
+def get_all_clients(db: Session = Depends(get_db)):
+    clients = db.query(Client).all()
+    return clients

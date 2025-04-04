@@ -105,3 +105,23 @@ def delete_account(account_id: int, client: Client = Depends(get_current_client)
     db.delete(account)
     db.commit()
     return {"message": "Account deleted"}
+
+
+@app.get("/accounts/all")
+def get_all_accounts(token: str, db: Session = Depends(get_db)):
+    print(f"Verifying token: {token}")
+
+    response = requests.get(f"{AUTH_SERVICE_URL}/verify", headers={"Authorization": f"Bearer {token}"})
+    print(f"Verify response status: {response.status_code}")
+    print(f"Verify response text: {response.text}")
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail=response.json())
+
+    user_data = response.json()
+    print(f"User data: {user_data}")
+
+    if user_data.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can view all accounts")
+
+    return db.query(Account).all()
